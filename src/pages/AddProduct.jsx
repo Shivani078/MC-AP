@@ -1,227 +1,249 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { databases, storage } from "../appwrite/client"; // import storage
-import { PackagePlus, Tag, CircleDollarSign, Warehouse, FileText, ImageUp, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
+import { useNavigate, Link } from "react-router-dom";
+import { databases, storage } from "../appwrite/client";
+import { getAuth } from "firebase/auth";
+import {
+    PackagePlus,
+    Tag,
+    CircleDollarSign,
+    Warehouse,
+    FileText,
+    ImageUp,
+    Loader2,
+    CheckCircle,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
-
-const APPWRITE_BUCKET_ID = import.meta.env.VITE_APPWRITE_BUCKET_ID;
 const APPWRITE_DB_ID = import.meta.env.VITE_APPWRITE_DB_ID;
 const APPWRITE_COLLECTION_ID = import.meta.env.VITE_APPWRITE_COLLECTION_ID;
+const APPWRITE_BUCKET_ID = import.meta.env.VITE_APPWRITE_BUCKET_ID;
 const APPWRITE_PROJECT_ID = import.meta.env.VITE_APPWRITE_PROJECT_ID;
-const APPWRITE_ENDPOINT = import.meta.env.VITE_APPWRITE_ENDPOINT;
 
-const AddProduct = ({ user, setProducts, onBack }) => {
+const AddProduct = () => {
     const navigate = useNavigate();
-    const [product, setProduct] = useState({
+    const [formData, setFormData] = useState({
         name: "",
         category: "",
+        description: "",
         price: "",
         stock: "",
-        description: "",
         image: null,
     });
-    const [error, setError] = useState("");
-    const [success, setSuccess] = useState("");
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [addedProduct, setAddedProduct] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [success, setSuccess] = useState(false);
 
     const handleChange = (e) => {
         const { name, value, files } = e.target;
         if (name === "image") {
-            setProduct((prev) => ({ ...prev, image: files[0] }));
+            setFormData({ ...formData, image: files[0] });
         } else {
-            setProduct((prev) => ({ ...prev, [name]: value }));
+            setFormData({ ...formData, [name]: value });
         }
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setError("");
-        setSuccess("");
-        setAddedProduct(null);
-        setIsSubmitting(true);
-
-        if (!user || !user.uid) {
-            setError("User not authenticated. Please login again.");
-            setIsSubmitting(false);
-            return;
-        }
-
-        if (!product.name || !product.category || !product.price || !product.stock) {
-            setError("Please fill all required fields.");
-            setIsSubmitting(false);
-            return;
-        }
+        setLoading(true);
 
         try {
-            let imageUrl = "";
-            // 1. Upload image if present
-            if (product.image) {
-                const file = product.image;
-                const uploadResponse = await storage.createFile(
-                    APPWRITE_BUCKET_ID, // from env
-                    "unique()",
-                    file,
-                    ['read("any")'] // CORRECT public read permission
-                );
-                // 2. Manually construct the public URL
-                imageUrl = `${APPWRITE_ENDPOINT}/storage/buckets/${APPWRITE_BUCKET_ID}/files/${uploadResponse.$id}/view?project=${APPWRITE_PROJECT_ID}`;
+            const auth = getAuth();
+            const user = auth.currentUser;
+            if (!user) {
+                alert("You must be logged in to add a product.");
+                setLoading(false);
+                return;
             }
 
-            // 3. Save product with image URL (empty string if no image)
-            const response = await databases.createDocument(
-                APPWRITE_DB_ID, // from env
-                APPWRITE_COLLECTION_ID, // from env
-                'unique()',
+            let imageUrl = "";
+            if (formData.image) {
+                const uploadedFile = await storage.createFile(
+                    APPWRITE_BUCKET_ID,
+                    "unique()",
+                    formData.image
+                );
+                imageUrl = `https://cloud.appwrite.io/v1/storage/buckets/${APPWRITE_BUCKET_ID}/files/${uploadedFile.$id}/view?project=${APPWRITE_PROJECT_ID}`;
+            }
+
+            // Create document without permissions array
+            await databases.createDocument(
+                APPWRITE_DB_ID,
+                APPWRITE_COLLECTION_ID,
+                "unique()",
                 {
-                    name: product.name,
-                    category: product.category,
-                    price: Number(product.price),
-                    stock: Number(product.stock),
-                    description: product.description,
-                    user_id: user.uid,
-                    image_url: imageUrl // will be "" if no image
+                    name: formData.name,
+                    category: formData.category,
+                    desciption: formData.description, // use same spelling as in Appwrite collection
+                    price: Number(formData.price),
+                    stock: Number(formData.stock),
+                    image_url: imageUrl,
+                    user_id: user.uid, // store Firebase UID for filtering later
                 }
             );
-            setSuccess("Product added successfully!");
-            setAddedProduct(response);
-            setProduct({
+
+            setSuccess(true);
+            setFormData({
                 name: "",
                 category: "",
+                description: "",
                 price: "",
                 stock: "",
-                description: "",
                 image: null,
             });
-            // Also clear the file input visually
-            e.target.reset();
-        } catch (err) {
-            setError("Error adding product. Please try again.");
-            console.error(err);
+        } catch (error) {
+            console.error("Error adding product:", error);
+            alert("❌ Failed to add product: " + error.message);
         } finally {
-            setIsSubmitting(false);
+            setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8 flex items-center justify-center">
-            <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-2xl relative">
-                 <button 
-                    onClick={onBack} 
-                    className="absolute top-4 left-4 p-2 bg-gray-100 rounded-full text-gray-600 hover:bg-gray-200 transition"
-                    title="Go Back to Dashboard"
-                >
-                    <ArrowLeft className="w-6 h-6" />
-                </button>
-                <form
-                    onSubmit={handleSubmit}
-                    encType="multipart/form-data"
-                >
-                    <h2 className="text-3xl font-bold text-gray-800 mb-8 text-center flex items-center justify-center gap-3">
-                        <PackagePlus className="w-8 h-8 text-indigo-600" />
-                        Add New Product
-                    </h2>
+        <div className="relative max-w-3xl mx-auto bg-white p-8 rounded-2xl shadow-xl">
+            <h2 className="text-3xl font-bold mb-6 flex items-center gap-2">
+                <PackagePlus className="w-7 h-7 text-blue-600" /> Add New Product
+            </h2>
 
-                    {error && (
-                        <div className="my-4 flex items-center gap-3 text-center p-3 bg-red-100 text-red-700 rounded-lg">
-                            <AlertCircle className="w-5 h-5" />
-                            <span>{error}</span>
-                        </div>
-                    )}
-                    {success && (
-                        <div className="my-4 flex items-center justify-between p-3 bg-green-100 text-green-700 rounded-lg">
-                             <div className="flex items-center gap-3">
-                                <CheckCircle className="w-5 h-5" />
-                               <span>{success}</span>
-                            </div>
-                            {addedProduct && (
-                                <button
-                                    onClick={() => navigate('/products')}
-                                    className="font-semibold text-green-800 hover:text-green-900 hover:underline"
-                                >
-                                    View Products
-                                </button>
-                            )}
-                        </div>
-                    )}
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        <div>
-                            <label className="block mb-2 font-medium text-gray-700 flex items-center gap-2"><PackagePlus className="w-5 h-5" /> Product Name *</label>
-                            <input
-                                type="text" name="name" value={product.name} onChange={handleChange} required
-                                className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
-                                placeholder="e.g., Silk Saree"
-                            />
-                        </div>
-                        <div>
-                            <label className="block mb-2 font-medium text-gray-700 flex items-center gap-2"><Tag className="w-5 h-5" /> Category *</label>
-                            <input
-                                type="text" name="category" value={product.category} onChange={handleChange} required
-                                className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
-                                placeholder="e.g., Apparel"
-                            />
-                        </div>
-                        <div>
-                            <label className="block mb-2 font-medium text-gray-700 flex items-center gap-2"><CircleDollarSign className="w-5 h-5" /> Price (₹) *</label>
-                            <input
-                                type="number" name="price" value={product.price} onChange={handleChange} required
-                                className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
-                                placeholder="e.g., 2999"
-                            />
-                        </div>
-                        <div>
-                            <label className="block mb-2 font-medium text-gray-700 flex items-center gap-2"><Warehouse className="w-5 h-5" /> Stock Quantity *</label>
-                            <input
-                                type="number" name="stock" value={product.stock} onChange={handleChange} required
-                                className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
-                                placeholder="e.g., 50"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="mb-6">
-                        <label className="block mb-2 font-medium text-gray-700 flex items-center gap-2"><FileText className="w-5 h-5" /> Description</label>
-                        <textarea
-                            name="description" value={product.description} onChange={handleChange}
-                            className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
-                            rows={4}
-                            placeholder="Add key features, materials, and other details..."
+            <form onSubmit={handleSubmit} className="space-y-6">
+                {/* 2 fields per row */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Product Name */}
+                    <div>
+                        <label className="flex items-center gap-2 font-medium mb-1">
+                            <Tag className="w-5 h-5 text-gray-600" /> Product Name
+                        </label>
+                        <input
+                            type="text"
+                            name="name"
+                            value={formData.name}
+                            onChange={handleChange}
+                            placeholder="Enter product name"
+                            className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
+                            required
                         />
                     </div>
 
-                    <div className="mb-6">
-                        <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                            <ImageUp className="w-5 h-5" /> Product Image
+                    {/* Category */}
+                    <div>
+                        <label className="flex items-center gap-2 font-medium mb-1">
+                            <Tag className="w-5 h-5 text-gray-600" /> Category
                         </label>
-                        <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg">
-                            <div className="space-y-1 text-center">
-                                <ImageUp className="mx-auto h-12 w-12 text-gray-400" />
-                                <div className="flex text-sm text-gray-600">
-                                    <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
-                                        <span>Upload a file</span>
-                                        <input id="file-upload" name="image" type="file" className="sr-only" onChange={handleChange} />
-                                    </label>
-                                    <p className="pl-1">or drag and drop</p>
-                                </div>
-                                {product.image ? (
-                                    <p className="text-sm text-green-600 pt-2">{product.image.name}</p>
-                                ) : (
-                                    <p className="text-xs text-gray-500">PNG, JPG up to 10MB</p>
-                                )}
-                            </div>
-                        </div>
+                        <input
+                            type="text"
+                            name="category"
+                            value={formData.category}
+                            onChange={handleChange}
+                            placeholder="e.g. Electronics, Fashion"
+                            className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
+                            required
+                        />
                     </div>
 
-                    <button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-6 rounded-lg font-semibold flex items-center justify-center gap-2 hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    {/* Price */}
+                    <div>
+                        <label className="flex items-center gap-2 font-medium mb-1">
+                            <CircleDollarSign className="w-5 h-5 text-gray-600" /> Price
+                        </label>
+                        <input
+                            type="number"
+                            name="price"
+                            value={formData.price}
+                            onChange={handleChange}
+                            placeholder="Enter price"
+                            className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
+                            required
+                        />
+                    </div>
+
+                    {/* Stock */}
+                    <div>
+                        <label className="flex items-center gap-2 font-medium mb-1">
+                            <Warehouse className="w-5 h-5 text-gray-600" /> Stock
+                        </label>
+                        <input
+                            type="number"
+                            name="stock"
+                            value={formData.stock}
+                            onChange={handleChange}
+                            placeholder="Enter available stock"
+                            className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
+                            required
+                        />
+                    </div>
+                </div>
+
+                {/* Description */}
+                <div>
+                    <label className="flex items-center gap-2 font-medium mb-1">
+                        <FileText className="w-5 h-5 text-gray-600" /> Description
+                    </label>
+                    <textarea
+                        name="description"
+                        value={formData.description}
+                        onChange={handleChange}
+                        placeholder="Write a short description..."
+                        className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
+                        rows="3"
+                    />
+                </div>
+
+                {/* Image */}
+                <div>
+                    <label className="flex items-center gap-2 font-medium mb-1">
+                        <ImageUp className="w-5 h-5 text-gray-600" /> Upload Image
+                    </label>
+                    <input
+                        type="file"
+                        name="image"
+                        accept="image/*"
+                        onChange={handleChange}
+                        className="w-full border rounded-lg p-2"
+                    />
+                </div>
+
+                {/* Submit */}
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-blue-600 text-white py-3 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700 transition"
+                >
+                    {loading ? (
+                        <>
+                            <Loader2 className="animate-spin w-5 h-5" /> Saving...
+                        </>
+                    ) : (
+                        "Add Product"
+                    )}
+                </button>
+            </form>
+
+            {/* Success Popup */}
+            <AnimatePresence>
+                {success && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        transition={{ duration: 0.3 }}
+                        className="fixed inset-0 flex items-center justify-center bg-black/40 z-50"
+                        onClick={() => setSuccess(false)}
                     >
-                        {isSubmitting ? 'Submitting...' : 'Add Product'}
-                    </button>
-                </form>
-            </div>
+                        <div
+                            className="bg-white p-6 rounded-2xl shadow-2xl text-center max-w-sm mx-auto cursor-pointer"
+                            onClick={() => setSuccess(false)}
+                        >
+                            <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-3" />
+                            <h3 className="text-xl font-bold mb-2">Product Added Successfully!</h3>
+                            <p className="text-gray-600 mb-4">Your product has been added to the database.</p>
+                            <Link
+                                to="/products"
+                                className="inline-block bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+                            >
+                                View Products
+                            </Link>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

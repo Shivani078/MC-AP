@@ -1,110 +1,227 @@
+from fastapi import APIRouter
+from pydantic import BaseModel
+from typing import List
 import os
 import json
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
-from typing import List, Optional
-
-# --- LangChain Imports ---
+import re
+import random
+from serpapi import GoogleSearch
+from langchain.prompts import PromptTemplate
+from langchain.schema import StrOutputParser
 from langchain_groq import ChatGroq
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import PydanticOutputParser
+from dotenv import load_dotenv
 
+# -------------------------------
+# Load .env
+# -------------------------------
+load_dotenv()  # loads environment variables from .env
 
-# --- Pydantic Models for Structured JSON Response ---
-# These models define the exact structure for the Trends & Insights page data.
-# Added descriptions (Field) to help the AI understand the data better.
-class PersonalizedInsight(BaseModel):
-    location: str = Field(description="The geographical area for the insight, e.g., 'Jaipur'")
-    trend: str = Field(description="The specific product or trend being analyzed")
-    change: str = Field(description="The percentage change, e.g., '+32%' or '-15%'")
-    type: str = Field(description="The type of insight, e.g., 'opportunity', 'warning', 'trending', or 'seasonal'")
-    message: str = Field(description="A concise, actionable message for the seller")
-    action: str = Field(description="A short call to action, e.g., 'Promote Now'")
-
-class CategoryDataPoint(BaseModel):
-    period: str = Field(description="The time period for the data point, e.g., 'Week 1'")
-    searches: int = Field(description="The number of searches for the category in this period")
-    purchases: int = Field(description="The number of purchases for the category in this period")
-    events: Optional[str] = Field(description="Any notable event during this period, e.g., 'Diwali Prep'", default=None)
-
-class Hotspot(BaseModel):
-    area: str = Field(description="The specific neighborhood or area of the hotspot")
-    pincode: str = Field(description="The postal PIN code for the area, formatted as a JSON string (e.g., \"110001\")")
-    city: str = Field(description="The city of the hotspot")
-    product: str = Field(description="The product category that is in high demand")
-    trend: str = Field(description="The direction of the trend as a single word: 'up', 'down', or 'stable'")
-    activity: int = Field(description="A numeric score from 1 to 100 representing the demand intensity or sales volume.")
-
-class TrendingProduct(BaseModel):
-    product: str = Field(description="The name of the trending product")
-    trend: str = Field(description="The trend percentage, e.g., '+32%'")
-    avgPrice: str = Field(description="The average selling price, e.g., '₹799'")
-    action: str = Field(description="A suggested action, e.g., 'Promote Now'")
-    similarity: int = Field(description="A percentage similarity score to the seller's inventory")
-
-class ReturnedProduct(BaseModel):
-    product: str = Field(description="The name of the product with a high return rate")
-    returnRate: str = Field(description="The return rate percentage, e.g., '18%'")
-    mainReason: str = Field(description="The primary reason for returns")
-    suggestion: str = Field(description="An actionable suggestion to reduce returns")
-
-class TrendsResponse(BaseModel):
-    personalizedInsights: List[PersonalizedInsight] = Field(description="A list of personalized insights for the seller")
-    categoryData: List[CategoryDataPoint] = Field(description="A list of data points for the category performance chart")
-    hotspots: List[Hotspot] = Field(description="A list of demand hotspots")
-    trendingProducts: List[TrendingProduct] = Field(description="A list of trending products relevant to the seller")
-    returnedProducts: List[ReturnedProduct] = Field(description="A list of products with high return rates")
-
-# --- Router Initialization ---
 router = APIRouter()
 
-# --- AI Model Configuration ---
-try:
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        raise KeyError("GROQ_API_KEY not found in .env file")
-    
-    model = ChatGroq(model='gemma2-9b-it', model_kwargs={"response_format": {"type": "json_object"}})
-except Exception as e:
-    print(f"Error during Groq configuration in trends: {e}")
-    model = None
+# -------------------------------
+# API Keys from environment
+# -------------------------------
+# Correct environment variable fetching
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+# Note: the project .env uses `SERPAPI_KEY` (not `SERPAPI_API_KEY`).
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 
-# --- API Endpoint for Trends & Insights ---
-@router.get("/full-trends-report", response_model=TrendsResponse)
-async def get_full_trends_report(location: str = "Delhi", category: str = "Kurtis"):
-    if not model:
-        raise HTTPException(status_code=500, detail="Groq API model is not configured.")
+missing = [name for name, val in (("GROQ_API_KEY", GROQ_API_KEY), ("SERPAPI_KEY", SERPAPI_KEY)) if not val]
+if missing:
+    raise ValueError(f"API keys are not set in environment variables: {', '.join(missing)}")
 
+# Use GROQ_API_KEY consistently
+groq_model = ChatGroq(model="llama-3.1-8b-instant", temperature=0.7, api_key=GROQ_API_KEY)
+
+
+# -------------------------------
+# Enhanced Prompt Template
+# -------------------------------
+template = """
+You are an expert fashion and lifestyle trend analyst.
+
+Analyze the following search results about **{category} trends in {city}**, 
+and return logical insights based on local culture, season, and events.
+
+For each trend, you must decide its *popularity* and an estimated *Change (%)* value.
+
+Rules:
+- High 🔥 → Change: between 35% to 70%
+- Medium ⚡ → Change: between 15% to 35%
+- Low ❄️ → Change: between 0% to 15%
+- The "Change" value should make sense with reasoning. (E.g., High if it's festival season or influencer-driven, Low if fading or niche.)
+- Base your reasoning on real-world logic for that city and category.
+
+Return STRICT JSON in this format:
+[
+  {{
+    "city": "{city}",
+    "trend": "Trend Name",
+    "popularity": "High 🔥 / Medium ⚡ / Low ❄️",
+    "change_pct": "45.2%",
+    "features": ["Feature 1", "Feature 2"],
+    "competitors": ["Competitor 1", "Competitor 2"],
+    "local_hotspots": ["Market/Area 1", "Market/Area 2"],
+    "tips": ["Tip 1", "Tip 2"]
+  }}
+]
+
+Search Results:
+{search_results}
+"""
+prompt = PromptTemplate.from_template(template)
+
+# -------------------------------
+# Request model
+# -------------------------------
+class TrendsRequest(BaseModel):
+    cities: List[str]
+    category: str
+
+# -------------------------------
+# Helper: clean Groq response
+# -------------------------------
+def clean_json_response(text: str):
+    match = re.search(r"\[.*\]", text, re.DOTALL)
+    if match:
+        return match.group(0)
+    return "[]"
+
+# -------------------------------
+# Fetch Google search results
+# -------------------------------
+def fetch_google_results(city, category):
+    query = f"{category} trends in {city}"
+    params = {
+        "engine": "google",
+        "q": query,
+        "hl": "en",
+        "gl": "in",
+        "api_key": SERPAPI_KEY,
+        "num": 10,
+    }
+    search = GoogleSearch(params)
+    results = search.get_dict()
+    return results.get("organic_results", [])
+
+# -------------------------------
+# Helper: assign random numeric pct and popularity score
+# -------------------------------
+def assign_random_metrics():
+    pct = round(random.uniform(3.0, 65.0), 1)
+    if pct >= 35.0:
+        label = "High 🔥"
+        score = 85
+    elif pct >= 15.0:
+        label = "Medium ⚡"
+        score = 55
+    else:
+        label = "Low ❄️"
+        score = 20
+    return pct, label, score
+
+# -------------------------------
+# Main endpoint
+# -------------------------------
+@router.post("/")
+def get_trends(request: TrendsRequest):
+    all_trends = []
+
+    for city in request.cities:
+        try:
+            results = fetch_google_results(city, request.category)
+            snippets = "\n".join([f"- {r.get('title')}: {r.get('snippet')}" for r in results])
+
+            # Groq reasoning
+            runnable = prompt | groq_model | StrOutputParser()
+            response = runnable.invoke({
+                "city": city,
+                "category": request.category,
+                "search_results": snippets,
+            })
+
+            cleaned = clean_json_response(response)
+            parsed = json.loads(cleaned)
+
+            for trend in parsed:
+                pct = None
+                if "change_pct" in trend:
+                    try:
+                        pct_val = re.search(r"([-+]?\d+(\.\d+)?)", str(trend.get("change_pct")))
+                        if pct_val:
+                            pct = round(float(pct_val.group(1)), 1)
+                    except:
+                        pct = None
+
+                if pct is None:
+                    pct, label, score = assign_random_metrics()
+                else:
+                    if pct >= 35.0:
+                        label = "High 🔥"
+                        score = 85
+                    elif pct >= 15.0:
+                        label = "Medium ⚡"
+                        score = 55
+                    else:
+                        label = "Low ❄️"
+                        score = 20
+
+                trend["pct_change"] = pct
+                trend["change_pct"] = f"{pct}%"
+                trend["popularity_score"] = score
+                trend["popularity"] = trend.get("popularity", label)
+
+                for key in ("features", "competitors", "local_hotspots", "tips"):
+                    if key not in trend or not isinstance(trend[key], list):
+                        trend[key] = trend.get(key, []) if isinstance(trend.get(key, list), list) else []
+
+            all_trends.extend(parsed)
+
+        except Exception as e:
+            all_trends.append({"city": city, "error": str(e)})
+
+    return {"trends": all_trends}
+
+# -------------------------------
+# Feature images route
+# -------------------------------
+@router.get("/feature-images")
+def get_feature_images(feature: str, category: str = ""):
     try:
-        # 1. Set up the Pydantic Output Parser
-        parser = PydanticOutputParser(pydantic_object=TrendsResponse)
-
-        # 2. Create a prompt template that includes the format instructions
-        prompt_template = PromptTemplate(
-            template="""
-            You are an expert Indian e-commerce trend analyst for Meesho sellers.
-            The seller's primary location is {location} and they are analyzing the {category} category.
-
-            Your task is to generate a complete trends and insights report.
-            Generate realistic data for a seller in {location} analyzing {category}.
-            Create 3 personalized insights, 5 weeks of category data, 4 hotspots, 4 trending products, and 3 returned products.
-
-            {format_instructions}
-            """,
-            input_variables=["location", "category"],
-            partial_variables={"format_instructions": parser.get_format_instructions()},
+        llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.5, api_key=GROQ_API_KEY)
+        refine_prompt = (
+            f"Refine this term for real e-commerce search: '{feature}' in context of '{category}'. "
+            "Output only a short query likely to find trending or best-selling items on Amazon, Myntra, or Flipkart."
         )
+        refined = llm.invoke(refine_prompt)
+        refined_query = refined.content.strip()
 
-        # 3. Create the processing chain
-        chain = prompt_template | model | parser
-        
-        # 4. Invoke the chain with the query
-        response = await chain.ainvoke({"location": location, "category": category})
-        
-        return response
+        search_query = f"best selling {refined_query} {category} fashion site:myntra.com OR site:amazon.in OR site:flipkart.com"
+        params = {
+            "engine": "google_images",
+            "q": search_query,
+            "hl": "en",
+            "gl": "in",
+            "num": 10,
+            "api_key": SERPAPI_KEY
+        }
+        search = GoogleSearch(params)
+        results = search.get_dict()
+        image_results = results.get("images_results", [])
+
+        image_urls = [img.get("original") or img.get("thumbnail") for img in image_results if img.get("original") or img.get("thumbnail")]
+        image_urls = [u for u in image_urls if u and u.startswith("http")]
+
+        return {
+            "feature": feature,
+            "category": category,
+            "refined_query": refined_query,
+            "images": image_urls[:6] if image_urls else []
+        }
 
     except Exception as e:
-        print(f"An error occurred in trends endpoint: {e}")
-        # This will now catch errors from the parser if the AI fails to generate a valid object
-        raise HTTPException(status_code=500, detail=f"An error occurred while generating the trends report: {e}")
-
+        return {
+            "feature": feature,
+            "category": category,
+            "error": str(e)
+        }

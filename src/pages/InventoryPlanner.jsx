@@ -31,12 +31,12 @@ const InventoryPlanner = () => {
             try {
                 // The URL points to your new backend endpoint
                 const response = await fetch(`${backendURL}/api/planner/full-report?location=Delhi`);
-                
+
                 if (!response.ok) {
                     const errorData = await response.json();
                     throw new Error(errorData.detail || 'Failed to fetch planner data');
                 }
-                
+
                 const data = await response.json();
                 setPlannerData(data);
             } catch (err) {
@@ -50,12 +50,12 @@ const InventoryPlanner = () => {
         fetchPlannerData();
     }, []);
 
-    const { 
-        upcomingFestivals, 
-        topProductsToStock, 
-        nearbyDemand, 
+    const {
+        upcomingFestivals,
+        topProductsToStock,
+        nearbyDemand,
         avoidProducts,
-        aiRecommendations 
+        aiRecommendations
     } = plannerData || {};
 
     if (isLoading) {
@@ -123,17 +123,16 @@ const InventoryPlanner = () => {
                                         <div key={festival.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                                             {/* Color Dot */}
                                             <div style={{ backgroundColor: festival.color }} className="w-4 h-4 rounded-full flex-shrink-0"></div>
-                                            
+
                                             {/* Main Info */}
                                             <div className="flex-1">
                                                 <div className="flex items-center gap-3 mb-1">
                                                     <h3 className="font-semibold text-gray-800 text-lg">{festival.name}</h3>
                                                     <span className="text-sm text-gray-500">• {festival.date}</span>
-                                                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                                        festival.urgency === 'high' ? 'bg-red-100 text-red-700' :
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${festival.urgency === 'high' ? 'bg-red-100 text-red-700' :
                                                         festival.urgency === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                                                        'bg-green-100 text-green-700'
-                                                    }`}>
+                                                            'bg-green-100 text-green-700'
+                                                        }`}>
                                                         {festival.daysLeft} days left
                                                     </span>
                                                 </div>
@@ -142,7 +141,7 @@ const InventoryPlanner = () => {
                                                     <span>Status: <strong className="text-gray-800">{festival.preparation}</strong></span>
                                                 </div>
                                             </div>
-                                            
+
                                             {/* Action Button */}
                                             <div className="text-right">
                                                 <button className="text-blue-600 hover:text-blue-800 font-medium">
@@ -187,8 +186,8 @@ const InventoryPlanner = () => {
                                             </td>
                                             <td className="py-4 px-4">
                                                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${product.demand === 'Very High' ? 'bg-red-100 text-red-700' :
-                                                        product.demand === 'High' ? 'bg-orange-100 text-orange-700' :
-                                                            'bg-yellow-100 text-yellow-700'
+                                                    product.demand === 'High' ? 'bg-orange-100 text-orange-700' :
+                                                        'bg-yellow-100 text-yellow-700'
                                                     }`}>
                                                     {product.demand}
                                                 </span>
@@ -198,8 +197,8 @@ const InventoryPlanner = () => {
                                             </td>
                                             <td className="py-4 px-4">
                                                 <span className={`px-2 py-1 rounded-full text-sm ${product.stockLevel === 'Critical' ? 'bg-red-100 text-red-700' :
-                                                        product.stockLevel === 'Low' ? 'bg-yellow-100 text-yellow-700' :
-                                                            'bg-green-100 text-green-700'
+                                                    product.stockLevel === 'Low' ? 'bg-yellow-100 text-yellow-700' :
+                                                        'bg-green-100 text-green-700'
                                                     }`}>
                                                     {product.stockLevel}
                                                 </span>
@@ -308,13 +307,13 @@ const InventoryPlanner = () => {
                     <div className="space-y-4">
                         {aiRecommendations && aiRecommendations.map((rec) => (
                             <div key={rec.id} className={`p-4 rounded-lg border ${rec.priority === 'High' ? 'bg-red-50 border-red-200' :
-                                    rec.priority === 'Medium' ? 'bg-yellow-50 border-yellow-200' :
-                                        'bg-green-50 border-green-200'
+                                rec.priority === 'Medium' ? 'bg-yellow-50 border-yellow-200' :
+                                    'bg-green-50 border-green-200'
                                 }`}>
                                 <div className="flex items-center gap-2 mb-3">
                                     <div className={`w-3 h-3 rounded-full ${rec.priority === 'High' ? 'bg-red-500' :
-                                            rec.priority === 'Medium' ? 'bg-yellow-500' :
-                                                'bg-green-500'
+                                        rec.priority === 'Medium' ? 'bg-yellow-500' :
+                                            'bg-green-500'
                                         }`}></div>
                                     <h3 className="font-semibold text-gray-800">{rec.product}</h3>
                                 </div>
@@ -335,8 +334,8 @@ const InventoryPlanner = () => {
 
                                 <div className="flex items-center justify-between">
                                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${rec.priority === 'High' ? 'bg-red-100 text-red-700' :
-                                            rec.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                                                'bg-green-100 text-green-700'
+                                        rec.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                                            'bg-green-100 text-green-700'
                                         }`}>
                                         {rec.priority} Priority
                                     </span>

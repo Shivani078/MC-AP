@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { User, MapPin, Store, Edit3, Check, X, Target, Camera, Bell, Lock, HelpCircle, ShieldCheck, Calendar, Star, Trophy, TrendingUp } from 'lucide-react';
+import {
+    Store, Edit3, Check, X, Target, Bell, Lock, HelpCircle, ShieldCheck, Calendar, Star, Trophy, TrendingUp, Plus, Trash2
+} from 'lucide-react';
 import { databases } from '../appwrite/client'; // Import Appwrite database
 
 const APPWRITE_DB_ID = import.meta.env.VITE_APPWRITE_DB_ID;
@@ -14,23 +16,19 @@ const ProfileSmartScorePage = ({ user }) => {
 
     useEffect(() => {
         const fetchProfile = async () => {
-            console.log("Profile.jsx: useEffect triggered.");
             if (!user || !APPWRITE_PROFILES_COLLECTION_ID) {
-                console.error("Profile fetch skipped: User is not available or Collection ID is missing.", { user, APPWRITE_PROFILES_COLLECTION_ID });
                 setError("Configuration error. Cannot fetch profile.");
                 setIsLoading(false);
                 return;
-            };
+            }
 
-            console.log(`Fetching profile for user UID: ${user.uid}`);
             try {
                 const doc = await databases.getDocument(APPWRITE_DB_ID, APPWRITE_PROFILES_COLLECTION_ID, user.uid);
-                console.log("Successfully fetched profile data:", doc);
                 setProfileData(doc);
-                setOriginalProfileData(doc); // Keep a copy for "cancel"
+                setOriginalProfileData(doc);
             } catch (err) {
                 setError("Could not load your profile. Please try again later.");
-                console.error("Failed to fetch profile in Profile.jsx:", err);
+                console.error("Fetch error:", err);
             } finally {
                 setIsLoading(false);
             }
@@ -43,7 +41,7 @@ const ProfileSmartScorePage = ({ user }) => {
         const { name, value } = e.target;
         setProfileData(prev => ({ ...prev, [name]: value }));
     };
-    
+
     const handleCategoryToggle = (category) => {
         setProfileData(prev => {
             const currentCategories = prev.categories || [];
@@ -51,6 +49,30 @@ const ProfileSmartScorePage = ({ user }) => {
                 ? currentCategories.filter(c => c !== category)
                 : [...currentCategories, category];
             return { ...prev, categories: newCategories };
+        });
+    };
+
+    // Store Address handlers
+    const handleAddAddress = () => {
+        setProfileData(prev => ({
+            ...prev,
+            storeAddresses: [...(prev.storeAddresses || []), ""]
+        }));
+    };
+
+    const handleAddressChange = (index, value) => {
+        setProfileData(prev => {
+            const updated = [...(prev.storeAddresses || [])];
+            updated[index] = value;
+            return { ...prev, storeAddresses: updated };
+        });
+    };
+
+    const handleRemoveAddress = (index) => {
+        setProfileData(prev => {
+            const updated = [...(prev.storeAddresses || [])];
+            updated.splice(index, 1);
+            return { ...prev, storeAddresses: updated };
         });
     };
 
@@ -66,14 +88,14 @@ const ProfileSmartScorePage = ({ user }) => {
     const handleSave = async () => {
         try {
             const { $id, $collectionId, $databaseId, $createdAt, $updatedAt, $permissions, ...updateData } = profileData;
-            
+
             await databases.updateDocument(
                 APPWRITE_DB_ID,
                 APPWRITE_PROFILES_COLLECTION_ID,
                 user.uid,
                 updateData
             );
-            setOriginalProfileData(profileData); // Update original data on successful save
+            setOriginalProfileData(profileData);
             setIsEditing(false);
         } catch (err) {
             setError("Failed to save changes. Please try again.");
@@ -93,7 +115,7 @@ const ProfileSmartScorePage = ({ user }) => {
     if (error) {
         return <div className="p-6 text-center text-red-500">{error}</div>;
     }
-    
+
     if (!profileData) {
         return <div className="p-6 text-center">Your profile data could not be loaded.</div>;
     }
@@ -116,7 +138,7 @@ const ProfileSmartScorePage = ({ user }) => {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Left Column - Profile Info */}
+                    {/* Left Column */}
                     <div className="lg:col-span-2 space-y-6">
                         {/* Business Profile Card */}
                         <div className="bg-white p-6 rounded-lg shadow-sm border">
@@ -146,10 +168,11 @@ const ProfileSmartScorePage = ({ user }) => {
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Business fields */}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Business Name</label>
                                     {isEditing ? (
-                                        <input type="text" name="businessName" value={profileData.businessName} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg"/>
+                                        <input type="text" name="businessName" value={profileData.businessName} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg" />
                                     ) : (
                                         <p className="p-3 bg-gray-50 rounded-lg font-medium">{profileData.businessName}</p>
                                     )}
@@ -157,7 +180,7 @@ const ProfileSmartScorePage = ({ user }) => {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Owner Name</label>
                                     {isEditing ? (
-                                        <input type="text" name="ownerName" value={profileData.ownerName} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg"/>
+                                        <input type="text" name="ownerName" value={profileData.ownerName} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg" />
                                     ) : (
                                         <p className="p-3 bg-gray-50 rounded-lg font-medium">{profileData.ownerName}</p>
                                     )}
@@ -165,40 +188,81 @@ const ProfileSmartScorePage = ({ user }) => {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">PIN Code</label>
                                     {isEditing ? (
-                                        <input type="text" name="pinCode" value={profileData.pinCode} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg"/>
+                                        <input type="text" name="pinCode" value={profileData.pinCode} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg" />
                                     ) : (
                                         <p className="p-3 bg-gray-50 rounded-lg font-medium">{profileData.pinCode}</p>
                                     )}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                                     {isEditing ? (
-                                        <input type="tel" name="phone" value={profileData.phone || ''} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg"/>
+                                    {isEditing ? (
+                                        <input type="tel" name="phone" value={profileData.phone || ''} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg" />
                                     ) : (
                                         <p className="p-3 bg-gray-50 rounded-lg font-medium">{profileData.phone || 'N/A'}</p>
                                     )}
                                 </div>
-                                 <div className="md:col-span-2">
+                                <div className="md:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                                     <p className="p-3 bg-gray-100 rounded-lg font-medium text-gray-500 cursor-not-allowed">{profileData.email}</p>
                                 </div>
                                 <div className="md:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
                                     {isEditing ? (
-                                        <textarea name="address" value={profileData.address || ''} onChange={handleInputChange} rows={3} className="w-full p-3 border border-gray-300 rounded-lg"/>
+                                        <textarea name="address" value={profileData.address || ''} onChange={handleInputChange} rows={3} className="w-full p-3 border border-gray-300 rounded-lg" />
                                     ) : (
                                         <p className="p-3 bg-gray-50 rounded-lg font-medium">{profileData.address || 'N/A'}</p>
                                     )}
                                 </div>
                                 <div className="md:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-2">GST Number</label>
-                                     {isEditing ? (
-                                        <input type="text" name="gstNumber" value={profileData.gstNumber || ''} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg"/>
+                                    {isEditing ? (
+                                        <input type="text" name="gstNumber" value={profileData.gstNumber || ''} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg" />
                                     ) : (
                                         <p className="p-3 bg-gray-50 rounded-lg font-medium">{profileData.gstNumber || 'N/A'}</p>
                                     )}
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Store Addresses */}
+                        <div className="bg-white p-6 rounded-lg shadow-sm border">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                                <Store className="w-5 h-5 text-green-500" />
+                                Store Addresses
+                            </h3>
+                            <div className="space-y-4">
+                                {(profileData.storeAddresses || []).map((addr, index) => (
+                                    <div key={index} className="flex gap-2 items-center">
+                                        {isEditing ? (
+                                            <>
+                                                <input
+                                                    type="text"
+                                                    value={addr}
+                                                    onChange={(e) => handleAddressChange(index, e.target.value)}
+                                                    className="w-full p-3 border border-gray-300 rounded-lg"
+                                                    placeholder="Enter store address"
+                                                />
+                                                <button
+                                                    onClick={() => handleRemoveAddress(index)}
+                                                    className="p-2 text-red-500 hover:text-red-700"
+                                                >
+                                                    <Trash2 className="w-5 h-5" />
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <p className="p-3 bg-gray-50 rounded-lg font-medium w-full">{addr}</p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                            {isEditing && (
+                                <button
+                                    onClick={handleAddAddress}
+                                    className="mt-4 flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                                >
+                                    <Plus className="w-4 h-4" /> Add Address
+                                </button>
+                            )}
                         </div>
 
                         {/* Category Preferences */}
@@ -212,26 +276,25 @@ const ProfileSmartScorePage = ({ user }) => {
                                     <button
                                         key={category}
                                         onClick={() => isEditing && handleCategoryToggle(category)}
-                                        className={`px-4 py-2 rounded-full font-medium transition-colors text-sm ${
-                                            (profileData.categories || []).includes(category)
+                                        className={`px-4 py-2 rounded-full font-medium transition-colors text-sm ${(profileData.categories || []).includes(category)
                                                 ? 'bg-indigo-600 text-white'
                                                 : 'bg-gray-200 text-gray-700'
-                                        } ${isEditing ? 'hover:bg-gray-300 cursor-pointer' : 'cursor-default'}`}
+                                            } ${isEditing ? 'hover:bg-gray-300 cursor-pointer' : 'cursor-default'}`}
                                         disabled={!isEditing}
                                     >
                                         {category}
                                     </button>
                                 ))}
                             </div>
-                             {isEditing && <p className="text-xs text-gray-500 mt-3">Click on categories to add or remove them.</p>}
+                            {isEditing && <p className="text-xs text-gray-500 mt-3">Click on categories to add or remove them.</p>}
                         </div>
                     </div>
 
-                    {/* Right Column - Smart Score & Settings */}
+                    {/* Right Column */}
                     <div className="space-y-6">
-                         <div className="bg-white p-6 rounded-lg shadow-sm border">
+                        <div className="bg-white p-6 rounded-lg shadow-sm border">
                             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                                <Trophy className="w-5 h-5 text-yellow-500"/>
+                                <Trophy className="w-5 h-5 text-yellow-500" />
                                 Badges Earned
                             </h3>
                             <div className="grid grid-cols-3 gap-4">
@@ -247,15 +310,15 @@ const ProfileSmartScorePage = ({ user }) => {
                             <h3 className="text-lg font-semibold text-gray-900 mb-4">Account Settings</h3>
                             <ul className="space-y-3">
                                 <li className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg">
-                                    <span className="flex items-center gap-3"><Bell className="w-5 h-5 text-gray-500"/> Notifications</span>
+                                    <span className="flex items-center gap-3"><Bell className="w-5 h-5 text-gray-500" /> Notifications</span>
                                     <button className="text-sm font-semibold text-blue-600">Manage</button>
                                 </li>
                                 <li className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg">
-                                    <span className="flex items-center gap-3"><Lock className="w-5 h-5 text-gray-500"/> Password & Security</span>
+                                    <span className="flex items-center gap-3"><Lock className="w-5 h-5 text-gray-500" /> Password & Security</span>
                                     <button className="text-sm font-semibold text-blue-600">Change</button>
                                 </li>
                                 <li className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg">
-                                    <span className="flex items-center gap-3"><HelpCircle className="w-5 h-5 text-gray-500"/> Help Center</span>
+                                    <span className="flex items-center gap-3"><HelpCircle className="w-5 h-5 text-gray-500" /> Help Center</span>
                                     <button className="text-sm font-semibold text-blue-600">Visit</button>
                                 </li>
                             </ul>

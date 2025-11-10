@@ -1,333 +1,483 @@
-import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, MapPin, Target, AlertTriangle, Calendar, Filter, RefreshCw, Eye, Zap, Clock, AlertCircle, Flame, Rocket, Sun } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import { Plus, MapPin, Search } from 'lucide-react';
+import {
+    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+    ResponsiveContainer, BarChart, Bar
+} from "recharts";
+import { databases } from '../appwrite/client';
+import { auth } from '../auth/firebase';  // <-- FIXED: Correct import path
+
+const APPWRITE_DB_ID = import.meta.env.VITE_APPWRITE_DB_ID;
+const APPWRITE_PROFILES_COLLECTION_ID = import.meta.env.VITE_APPWRITE_PROFILES_COLLECTION_ID;
 
 const TrendsInsightsPage = () => {
-    const [selectedCategory, setSelectedCategory] = useState('kurtis');
-    const [selectedRegion, setSelectedRegion] = useState('Delhi');
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [trendsData, setTrendsData] = useState(null);
-    const backendURL = import.meta.env.VITE_BACKEND_URL;
+    const [storeAddresses, setStoreAddresses] = useState([]);
+    const [additionalCities, setAdditionalCities] = useState("");
+    const [category, setCategory] = useState("");
+    const [trends, setTrends] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+    const [showAddCities, setShowAddCities] = useState(false);
 
-    const fetchData = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const response = await fetch(`${backendURL}/api/trends/full-trends-report?location=${selectedRegion}&category=${selectedCategory}`);
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ detail: 'Network response was not ok' }));
-                throw new Error(errorData.detail || 'Failed to fetch data');
-            }
-            const data = await response.json();
-            setTrendsData(data);
-        } catch (error) {
-            setError(error.message);
-            console.error("Failed to fetch trends data:", error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
+    // Fetch store addresses from profile
     useEffect(() => {
-        fetchData();
-    }, [selectedCategory, selectedRegion]);
+        const fetchProfile = async () => {
+            const user = auth.currentUser;
+            if (!user?.uid) {
+                setError("Please login to view trends");
+                return;
+            }
 
-    const refreshData = () => {
-        fetchData();
-    };
+            try {
+                const doc = await databases.getDocument(
+                    APPWRITE_DB_ID,
+                    APPWRITE_PROFILES_COLLECTION_ID,
+                    user.uid
+                );
+                setStoreAddresses(doc.storeAddresses || []);
+                // If we have store addresses, automatically fetch trends
+                if (doc.storeAddresses?.length > 0 && doc.categories?.length > 0) {
+                    setCategory(doc.categories[0]); // Use first category as default
+                    fetchTrendsForStores(doc.storeAddresses, doc.categories[0]);
+                }
+            } catch (err) {
+                setError("Could not load your store locations");
+                console.error("Profile fetch error:", err);
+            }
+        };
 
-    const {
-        personalizedInsights = [],
-        categoryData = [],
-        hotspots = [],
-        trendingProducts = [],
-        returnedProducts = []
-    } = trendsData || {};
+        fetchProfile();
+    }, []);
 
-    const getTrendIcon = (trend, size = 'w-5 h-5') => {
-        if (!trend) return null;
-        // For percentage strings like '+25%' or '-10%'
-        if (trend.includes('+')) return <TrendingUp className={`${size} text-green-500`} />;
-        if (trend.includes('-')) return <TrendingDown className={`${size} text-red-500`} />;
-        // For word strings like 'up' or 'down' from hotspots
-        if (trend.toLowerCase() === 'up') return <TrendingUp className={`${size} text-green-500`} />;
-        if (trend.toLowerCase() === 'down') return <TrendingDown className={`${size} text-red-500`} />;
-        // Fallback for 'stable' or other cases
-        return <div className="w-4 h-4 bg-gray-400 rounded-full"></div>;
-    };
+    const fetchTrendsForStores = async (locations, selectedCategory) => {
+        if (!locations.length || !selectedCategory) return;
 
-    const getActionButtonClass = (actionType) => {
-        switch (actionType) {
-            case 'Promote Now': return 'bg-green-500 text-white hover:bg-green-600';
-            case 'Stock Up': return 'bg-blue-500 text-white hover:bg-blue-600';
-            case 'Good Demand': return 'bg-yellow-500 text-white hover:bg-yellow-600';
-            case 'Low Demand': return 'bg-gray-500 text-white hover:bg-gray-600';
-            case 'Avoid': return 'bg-red-500 text-white hover:bg-red-600';
-            default: return 'bg-indigo-500 text-white hover:bg-indigo-600';
+        setLoading(true);
+        setError("");
+        try {
+            // Extract city names from addresses (assuming format: "City, State, PIN")
+            const cities = locations.map(addr => addr.split(',')[0].trim());
+
+            const response = await axios.post("http://localhost:8000/api/trends", {
+                cities: cities,
+                category: selectedCategory,
+            });
+            setTrends(response.data.trends);
+        } catch (err) {
+            setError(err.message || "Could not fetch trends");
+        } finally {
+            setLoading(false);
         }
     };
 
-    const InsightCard = ({ insight }) => {
-        const getInsightIcon = (type) => {
-            switch (type) {
-                case 'opportunity':
-                    return <Flame className="w-5 h-5 text-orange-500" />;
-                case 'warning':
-                    return <AlertTriangle className="w-5 h-5 text-red-500" />;
-                case 'trending':
-                    return <Rocket className="w-5 h-5 text-blue-500" />;
-                case 'seasonal':
-                    return <Sun className="w-5 h-5 text-yellow-500" />;
-                default:
-                    return <Zap className="w-5 h-5 text-gray-500" />;
-            }
-        };
+    const handleSearchAdditional = async () => {
+        if (!additionalCities || !category) {
+            alert("Please enter both cities and category");
+            return;
+        }
 
-        const getCardColors = (type) => {
-            switch (type) {
-                case 'opportunity':
-                    return 'bg-green-50 border-green-200';
-                case 'warning':
-                    return 'bg-red-50 border-red-200';
-                case 'trending':
-                    return 'bg-blue-50 border-blue-200';
-                case 'seasonal':
-                    return 'bg-yellow-50 border-yellow-200';
-                default:
-                    return 'bg-gray-50 border-gray-200';
-            }
-        };
+        setLoading(true);
+        setError("");
+        try {
+            const allCities = [
+                ...storeAddresses.map(addr => addr.split(',')[0].trim()),
+                ...additionalCities.split(',').map(c => c.trim())
+            ];
 
-        const getButtonClass = (type) => {
-            switch (type) {
-                case 'opportunity':
-                    return 'bg-green-500 hover:bg-green-600 text-white';
-                case 'warning':
-                    return 'bg-red-500 hover:bg-red-600 text-white';
-                case 'trending':
-                    return 'bg-blue-500 hover:bg-blue-600 text-white';
-                case 'seasonal':
-                    return 'bg-yellow-500 hover:bg-yellow-600 text-white';
-                default:
-                    return 'bg-gray-500 hover:bg-gray-600 text-white';
-            }
-        };
-
-        return (
-            <div className={`p-5 rounded-xl border shadow-sm hover:shadow-lg transition-shadow flex flex-col h-full ${getCardColors(insight.type)}`}>
-                <div className="flex items-center gap-3 mb-3">
-                    <div className="flex-shrink-0">
-                        {getInsightIcon(insight.type)}
-                    </div>
-                    <div className="flex items-center gap-2 overflow-hidden">
-                        <span className="bg-white px-2.5 py-1 rounded-full text-sm font-medium text-gray-700 flex items-center gap-1.5 whitespace-nowrap">
-                            <MapPin className="w-4 h-4 text-gray-500" />
-                            {insight.location}
-                        </span>
-                        <span className="bg-white px-2.5 py-1 rounded-full text-sm font-medium text-gray-700 flex items-center gap-1.5 whitespace-nowrap">
-                            {getTrendIcon(insight.change, 'w-4 h-4')}
-                            {insight.change}
-                        </span>
-                    </div>
-                </div>
-                <div className="flex-grow">
-                    <h3 className="text-lg font-bold text-gray-800 mb-1">{insight.trend}</h3>
-                    <p className="text-gray-600 text-sm mb-4">{insight.message}</p>
-                </div>
-                <div>
-                    <button className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${getButtonClass(insight.type)}`}>
-                        {insight.action}
-                    </button>
-                </div>
-            </div>
-        );
+            const response = await axios.post("http://localhost:8000/api/trends", {
+                cities: allCities,
+                category: category,
+            });
+            setTrends(response.data.trends);
+        } catch (err) {
+            setError(err.message || "Could not fetch trends");
+        } finally {
+            setLoading(false);
+        }
     };
+
+    // --- Prepare data for charts ---
+    const citiesSet = new Set(trends.map((t) => t.city));
+    const multipleCities = citiesSet.size > 1;
+
+    // ✅ Group data by trend name for line chart
+    const groupedByTrend = (() => {
+        const trendMap = {};
+        const allCities = Array.from(new Set(trends.map((t) => t.city)));
+
+        for (const t of trends) {
+            const name = t.trend || "Unknown";
+            if (!trendMap[name]) trendMap[name] = { name };
+            trendMap[name][t.city] =
+                typeof t.pct_change === "number"
+                    ? t.pct_change
+                    : Number(t.pct_change) || 0;
+        }
+
+        // Fill missing cities for consistency
+        for (const trendName in trendMap) {
+            for (const city of allCities) {
+                if (!(city in trendMap[trendName])) {
+                    trendMap[trendName][city] = 0;
+                }
+            }
+        }
+
+        return Object.values(trendMap);
+    })();
+
+    // Single city data
+    const singleCityData =
+        trends.length > 0
+            ? trends.map((t) => ({
+                name: t.trend,
+                pct_change:
+                    typeof t.pct_change === "number"
+                        ? t.pct_change
+                        : Number(t.pct_change) || 0,
+                popularity_score: t.popularity_score || 0,
+            }))
+            : [];
+
+    // Average change per trend for bar chart
+    const avgChangeByTrend = Object.values(
+        trends.reduce((acc, t) => {
+            const name = t.trend || "Unknown";
+            if (!acc[name]) acc[name] = { name, total: 0, count: 0 };
+            acc[name].total += Number(t.pct_change) || 0;
+            acc[name].count += 1;
+            return acc;
+        }, {})
+    ).map((item) => ({ name: item.name, avg_change: +(item.total / item.count).toFixed(1) }));
+
+    const topTrends = [...avgChangeByTrend].sort((a, b) => b.avg_change - a.avg_change).slice(0, 8);
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 p-4">
+        <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-7xl mx-auto">
-                {/* Header */}
-                <div className="flex justify-between items-center mb-8">
-                    <div>
-                        <h1 className="text-4xl font-bold text-gray-800 mb-2">
-                            📊 Your Personalized Trends
-                        </h1>
-                        <p className="text-gray-600 text-lg">
-                            AI-powered insights tailored to your business
-                        </p>
+                <h1 className="text-3xl font-bold mb-2 text-gray-800">📈 Your Store Trends</h1>
+
+                {/* Store Locations Summary */}
+                <div className="mb-6">
+                    <h2 className="text-lg font-medium text-gray-700 mb-3">Your Store Locations:</h2>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {storeAddresses.map((addr, idx) => (
+                            <div key={idx} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
+                                <MapPin className="w-4 h-4" />
+                                {addr.split(',')[0].trim()}
+                            </div>
+                        ))}
                     </div>
-                    <button
-                        onClick={refreshData}
-                        disabled={isLoading}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors disabled:opacity-50"
-                    >
-                        <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                        {isLoading ? 'Refreshing...' : 'Refresh Data'}
-                    </button>
                 </div>
 
-                {/* Loading and Error States */}
-                {isLoading && (
-                    <div className="flex justify-center items-center h-96">
-                        <div className="text-center">
-                            <RefreshCw className="w-12 h-12 text-blue-600 animate-spin mx-auto" />
-                            <p className="mt-4 text-lg text-gray-700">Brewing fresh insights for you...</p>
-                            <p className="text-sm text-gray-500">This might take a moment.</p>
+                {/* Controls */}
+                <div className="bg-white rounded-lg shadow-sm p-4 mb-8">
+                    <div className="flex flex-wrap gap-4 items-start">
+                        <div className="flex-1">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                            <input
+                                type="text"
+                                value={category}
+                                onChange={(e) => setCategory(e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-lg"
+                                placeholder="Enter product category"
+                            />
                         </div>
-                    </div>
-                )}
 
-                {error && !isLoading && (
-                    <div className="flex justify-center items-center h-96 bg-red-50 border border-red-200 rounded-lg p-4">
-                        <div className="text-center">
-                            <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
-                            <h3 className="mt-4 text-xl font-semibold text-red-700">Oops! Something went wrong.</h3>
-                            <p className="mt-2 text-sm text-red-600">{error}</p>
-                            <p className="text-sm text-gray-600 mt-2">Could not fetch data. Please ensure the backend is running and try again.</p>
-                            <button onClick={refreshData} className="mt-4 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600">
-                                Try Again
+                        {/* Toggle for additional cities */}
+                        <div className="flex-1">
+                            <button
+                                onClick={() => setShowAddCities(!showAddCities)}
+                                className="mb-2 text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
+                            >
+                                <Plus className="w-4 h-4" />
+                                {showAddCities ? 'Hide Additional Cities' : 'Add More Cities'}
                             </button>
+
+                            {showAddCities && (
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={additionalCities}
+                                        onChange={(e) => setAdditionalCities(e.target.value)}
+                                        className="flex-1 p-2 border border-gray-300 rounded-lg"
+                                        placeholder="Enter additional cities, comma-separated"
+                                    />
+                                    <button
+                                        onClick={handleSearchAdditional}
+                                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                                    >
+                                        <Search className="w-4 h-4" />
+                                        Search
+                                    </button>
+                                </div>
+                            )}
                         </div>
+                    </div>
+                </div>
+
+                {loading && <p className="text-center text-blue-600">Loading...</p>}
+                {error && (
+                    <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded mb-4">
+                        <p className="text-red-700">{error}</p>
                     </div>
                 )}
 
-                {/* Main Content */}
-                {!isLoading && !error && trendsData && (
-                    <>
-                        {/* Personalized AI Insight Cards */}
-                        <div className="mb-8">
-                            <h2 className="text-2xl font-bold text-gray-800 mb-4">🎯 Local Trend Summary</h2>
-                            <div className="grid lg:grid-cols-2 gap-6">
-                                {personalizedInsights.map((insight, index) => <InsightCard key={index} insight={insight} />)}
-                            </div>
-                        </div>
+                {/* --- Visualization --- */}
+                {trends.length > 0 && (
+                    <div className="rounded-2xl p-6 shadow-md mb-10 bg-gradient-to-br from-gray-100 via-gray-50 to-gray-200 border border-gray-200">
+                        <h2 className="text-lg font-semibold mb-4 text-gray-700 flex items-center gap-2">
+                            📊 {multipleCities ? "City-Wise Trend Comparison" : "Trend Movement"}
+                        </h2>
 
-                        {/* Category Trend Chart & Filters */}
-                        <div className="mb-8 p-6 bg-white rounded-2xl shadow-sm">
-                            <div className="flex flex-wrap justify-between items-center mb-4 gap-4">
-                                <h2 className="text-2xl font-bold text-gray-800">📈 Category Performance: {selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)}</h2>
-                                <div className="flex items-center gap-2">
-                                    <select
-                                        value={selectedCategory}
-                                        onChange={(e) => setSelectedCategory(e.target.value)}
-                                        className="p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option value="kurtis">Kurtis</option>
-                                        <option value="sarees">Sarees</option>
-                                        <option value="jewelry">Jewelry</option>
-                                    </select>
-                                    <select
-                                        value={selectedRegion}
-                                        onChange={(e) => setSelectedRegion(e.target.value)}
-                                        className="p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option value="Delhi">Delhi</option>
-                                        <option value="Mumbai">Mumbai</option>
-                                        <option value="Bangalore">Bangalore</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="h-80">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={categoryData}>
+                        <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 shadow-sm">
+                            <ResponsiveContainer width="100%" height={380}>
+                                {multipleCities ? (
+                                    // Multi-city Line Chart
+                                    <LineChart data={groupedByTrend}>
                                         <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="period" />
+                                        <XAxis dataKey="name" />
                                         <YAxis />
                                         <Tooltip />
                                         <Legend />
-                                        <Line type="monotone" dataKey="searches" stroke="#8884d8" strokeWidth={2} name="Searches" />
-                                        <Line type="monotone" dataKey="purchases" stroke="#82ca9d" strokeWidth={2} name="Purchases" />
+                                        {Array.from(new Set(trends.map((t) => t.city))).map(
+                                            (city, index) => (
+                                                <Line
+                                                    key={city}
+                                                    type="monotone"
+                                                    dataKey={city}
+                                                    stroke={`hsl(${index * 80}, 70%, 50%)`}
+                                                    strokeWidth={2}
+                                                    activeDot={{ r: 6 }}
+                                                />
+                                            )
+                                        )}
                                     </LineChart>
-                                </ResponsiveContainer>
-                            </div>
+                                ) : (
+                                    // ✅ Single-city Line with Dots
+                                    <LineChart data={singleCityData}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="name" />
+                                        <YAxis />
+                                        <Tooltip />
+                                        <Legend />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="pct_change"
+                                            name="Change (%)"
+                                            stroke="#6B8E23"
+                                            strokeWidth={3}
+                                            activeDot={{ r: 8 }}
+                                        />
+                                    </LineChart>
+                                )}
+                            </ResponsiveContainer>
                         </div>
+                    </div>
+                )}
 
-                        {/* Demand Hotspots */}
-                        <div className="mb-8 p-6 bg-white rounded-2xl shadow-sm">
-                            <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                <MapPin className="w-6 h-6 text-red-500" /> PIN-Code Hotspots
-                            </h2>
-                            <div className="space-y-3">
-                                {hotspots.map((spot, index) => (
-                                    <div key={index} className="grid grid-cols-3 items-center p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                                        {/* Left Column */}
-                                        <div>
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <h3 className="font-semibold text-gray-900">{spot.area}</h3>
-                                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-medium">
-                                                    {spot.pincode}
-                                                </span>
+
+                {/* --- Top Trends Bar Chart (Aesthetic Version) --- */}
+                {topTrends.length > 0 && (
+                    <div className="relative overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl shadow-sm border border-gray-200 mb-10 p-6">
+                        {/* Subtle background accent */}
+                        <div className="absolute -top-10 -right-10 w-40 h-40 bg-blue-100 rounded-full blur-3xl opacity-40"></div>
+                        <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-teal-100 rounded-full blur-3xl opacity-40"></div>
+
+                        <h2 className="text-xl font-semibold mb-6 text-gray-800 flex items-center gap-2">
+                            🔥 Top Trends by Average Change
+                        </h2>
+
+                        <ResponsiveContainer width="100%" height={300}>
+                            <BarChart
+                                data={topTrends}
+                                layout="vertical"
+                                margin={{ top: 10, right: 40, left: 0, bottom: 10 }}
+                            >
+                                {/* Gradient Definition */}
+                                <defs>
+                                    <linearGradient id="barGradient" x1="0" y1="0" x2="1" y2="1">
+                                        <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.95} />
+                                        <stop offset="100%" stopColor="#34d399" stopOpacity={0.95} />
+                                    </linearGradient>
+                                </defs>
+
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                <XAxis type="number" tick={{ fill: "#6b7280" }} />
+                                <YAxis
+                                    dataKey="name"
+                                    type="category"
+                                    width={160}
+                                    tick={{ fill: "#4b5563", fontWeight: 500 }}
+                                />
+                                <Tooltip
+                                    cursor={{ fill: "rgba(243,244,246,0.3)" }}
+                                    contentStyle={{
+                                        backgroundColor: "white",
+                                        borderRadius: "10px",
+                                        border: "1px solid #e5e7eb",
+                                        boxShadow: "0 4px 10px rgba(0,0,0,0.05)",
+                                    }}
+                                    labelStyle={{ fontWeight: 600, color: "#111827" }}
+                                />
+                                <Bar
+                                    dataKey="avg_change"
+                                    fill="url(#barGradient)"
+                                    radius={[10, 10, 10, 10]}
+                                    animationDuration={1200}
+                                    className="transition-all"
+                                    onMouseOver={(e) => (e.target.style.filter = "brightness(1.2)")}
+                                    onMouseOut={(e) => (e.target.style.filter = "brightness(1)")}
+                                />
+                            </BarChart>
+                        </ResponsiveContainer>
+
+                        {/* Subtle footer text */}
+                        <p className="text-sm text-gray-500 mt-4 text-center">
+                            Trends ranked by their average % change across selected cities
+                        </p>
+                    </div>
+                )}
+
+
+
+                {/* --- Trend Cards (Enhanced Aesthetic) --- */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {trends.map((trend, index) => (
+                        <div
+                            key={index}
+                            className="relative bg-gradient-to-b from-gray-100 to-gray-200 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden group border border-gray-300"
+                        >
+
+
+                            {/* Top gradient bar */}
+                            <div className="h-2 bg-gradient-to-r from-pink-400 via-rose-400 to-pink-600"></div>
+
+                            {trend.error ? (
+                                <div className="p-6">
+                                    <p className="text-red-500 font-medium flex items-center gap-2">
+                                        <span className="text-xl">⚠️</span>
+                                        Error for {trend.city}: {trend.error}
+                                    </p>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Main content with better padding and organization */}
+                                    <div className="p-6">
+                                        {/* City Header with icon */}
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                                                <span className="text-2xl">🏙️</span>
+                                                {trend.city}
+                                            </h2>
+                                            <div
+                                                className={`px-3 py-1 rounded-full text-sm font-medium 
+                                                ${trend.popularity.includes("High")
+                                                        ? "bg-green-100 text-green-700 ring-1 ring-green-200"
+                                                        : trend.popularity.includes("Medium")
+                                                            ? "bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200"
+                                                            : "bg-gray-50 text-gray-600 ring-1 ring-gray-200"
+                                                    }`}
+                                            >
+                                                {trend.popularity}
                                             </div>
-                                            <p className="text-sm text-gray-600">{spot.city}</p>
                                         </div>
 
-                                        {/* Middle Column */}
-                                        <div className="text-center">
-                                            <p className="font-medium text-gray-800">{spot.product}</p>
+                                        {/* Trend Name and Change % */}
+                                        <div className="mb-6">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <h3 className="text-lg font-semibold text-gray-900">
+                                                    {trend.trend}
+                                                </h3>
+                                                <div
+                                                    className={`flex items-center gap-1 px-3 py-1 rounded-lg text-sm font-medium
+                                                    ${trend.pct_change > 0
+                                                            ? "text-green-700 bg-green-50 ring-1 ring-green-200"
+                                                            : "text-red-700 bg-red-50 ring-1 ring-red-200"
+                                                        }`}
+                                                >
+                                                    <span className="text-lg">
+                                                        {trend.pct_change > 0 ? "↗" : "↘"}
+                                                    </span>
+                                                    {Math.abs(trend.pct_change)}%
+                                                </div>
+                                            </div>
                                         </div>
 
-                                        {/* Right Column */}
-                                        <div className="flex items-center justify-end gap-2 text-lg font-bold text-gray-800">
-                                            <span>{spot.activity}</span>
-                                            {getTrendIcon(spot.trend)}
+                                        {/* Info Grid */}
+                                        <div className="grid grid-cols-1 gap-4 text-sm">
+                                            {/* Features Section */}
+                                            <div className="bg-gray-50 rounded-xl p-3">
+                                                <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                                    <span>✨</span> Key Features
+                                                </h4>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {trend.features.map((feature, idx) => (
+                                                        <span key={idx} className="bg-white px-2 py-1 rounded-md text-gray-600 text-xs ring-1 ring-gray-200">
+                                                            {feature}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Competitors Section */}
+                                            <div className="bg-gray-50 rounded-xl p-3">
+                                                <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                                    <span>🏢</span> Market Players
+                                                </h4>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {trend.competitors.map((competitor, idx) => (
+                                                        <span key={idx} className="bg-white px-2 py-1 rounded-md text-gray-600 text-xs ring-1 ring-gray-200">
+                                                            {competitor}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Hotspots & Tips */}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="bg-gray-50 rounded-xl p-3">
+                                                    <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                                        <span>📍</span> Hotspots
+                                                    </h4>
+                                                    <div className="space-y-1">
+                                                        {trend.local_hotspots.map((spot, idx) => (
+                                                            <p key={idx} className="text-gray-600 text-xs">• {spot}</p>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div className="bg-gray-50 rounded-xl p-3">
+                                                    <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                                        <span>💡</span> Tips
+                                                    </h4>
+                                                    <div className="space-y-1">
+                                                        {trend.tips.map((tip, idx) => (
+                                                            <p key={idx} className="text-gray-600 text-xs">• {tip}</p>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                ))}
-                            </div>
-                        </div>
-                        
-                        <div className="grid md:grid-cols-2 gap-8">
-                            {/* Trending Products */}
-                            <div className="p-6 bg-white rounded-2xl shadow-sm">
-                                <h2 className="text-2xl font-bold text-gray-800 mb-4">⚡ Trending Products from your Inventory</h2>
-                                <div className="space-y-4">
-                                    {trendingProducts.map((item, index) => (
-                                        <div key={index} className="flex items-center gap-4 p-2 rounded-lg hover:bg-gray-50">
-                                            <div className="w-12 h-12 bg-gray-200 rounded-md flex items-center justify-center font-bold text-gray-500 text-xs">
-                                                {item.product.substring(0, 3).toUpperCase()}
-                                            </div>
-                                            <div className="flex-1">
-                                                <h3 className="font-semibold">{item.product}</h3>
-                                                <p className="text-sm text-gray-500">Avg. Price: {item.avgPrice}</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="font-bold flex items-center justify-end gap-1">
-                                                    {getTrendIcon(item.trend)}
-                                                    {item.trend}
-                                                </div>
-                                                <button className={`text-xs mt-1 px-2 py-1 rounded-full font-medium ${getActionButtonClass(item.action)}`}>
-                                                    {item.action}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
 
-                            {/* High-Return Products */}
-                            <div className="p-6 bg-white rounded-2xl shadow-sm">
-                                <h2 className="text-2xl font-bold text-gray-800 mb-4">⚠️ High-Return Products</h2>
-                                <div className="space-y-4">
-                                    {returnedProducts.map((item, index) => (
-                                        <div key={index} className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                                            <div className="flex justify-between items-center">
-                                                <h3 className="font-semibold text-red-800">{item.product}</h3>
-                                                <span className="text-red-600 font-bold">{item.returnRate} Return Rate</span>
-                                            </div>
-                                            <p className="text-sm text-gray-700 mt-1">
-                                                <strong>Reason:</strong> {item.mainReason}
-                                            </p>
-                                            <p className="text-sm text-blue-700 mt-2 bg-blue-100 p-2 rounded-md">
-                                                <strong>Suggestion:</strong> {item.suggestion}
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                                    {/* Footer */}
+                                    <div className="bg-gray-50 px-6 py-3 text-xs text-gray-500 flex items-center justify-between border-t border-gray-100">
+                                        <span className="flex items-center gap-1">
+                                            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                                            Updated {new Date().toLocaleDateString()}
+                                        </span>
+                                        <span className="flex items-center gap-1">
+
+                                            <span className="text-blue-400"></span>
+                                        </span>
+                                    </div>
+                                </>
+                            )}
                         </div>
-                    </>
-                )}
+                    ))}
+                </div>
+
             </div>
         </div>
     );

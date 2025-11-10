@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
-import Login from "./auth/Login"; // adjust path as needed
+import Login from "./auth/Login";
 import Products from "./pages/Products";
-import EditProduct from "./pages/EditProduct"; // Import EditProduct
-import Welcome from "./pages/Welcome"; // Import Welcome
+import EditProduct from "./pages/EditProduct";
+import Welcome from "./pages/Welcome";
 import { auth } from "./auth/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 
@@ -23,7 +23,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/welcome" element={<Welcome user={user} />} />
         <Route path="/products" element={<Products user={user} />} />
-        <Route path="/products/edit/:id" element={<EditProduct user={user} />} /> {/* Add this route */}
+        <Route path="/products/edit/:id" element={<EditProduct user={user} />} />
       </Routes>
     </div>
   );

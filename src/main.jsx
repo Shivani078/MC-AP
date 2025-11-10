@@ -1,13 +1,17 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
 import { BrowserRouter } from "react-router-dom";
-import "./index.css";
+import App from "./App";
+import { AuthProvider } from "./context/AuthContext";
+import "./index.css"; // if you’re using Tailwind or global styles
 
-ReactDOM.createRoot(document.getElementById("root")).render(
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(
   <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </AuthProvider>
   </React.StrictMode>
 );

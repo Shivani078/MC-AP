@@ -149,7 +149,7 @@ const OrdersReturnsPage = () => {
     const [showFilters, setShowFilters] = useState(false);
 
     const ordersData = [
-        { id: 'ORD-001', product: 'Wireless Bluetooth Headphones', category: 'Electronics', returnReason: 'Poor Sound Quality', status: 'returned', date: '2024-07-01', customerName: 'John Doe', amount: 89.99 },
+        { id: 'ORD-001', product: 'Wireless Bluetooth Headphones', category: 'Electronics', returnReason: 'Poor  Quality', status: 'returned', date: '2024-07-01', customerName: 'John Doe', amount: 89.99 },
         { id: 'ORD-002', product: 'Cotton Summer Dress', category: 'Clothing', returnReason: 'Wrong Size', status: 'returned', date: '2024-07-02', customerName: 'Jane Smith', amount: 59.99 },
         { id: 'ORD-003', product: 'Smartphone Case', category: 'Electronics', returnReason: 'Damaged in Transit', status: 'processing', date: '2024-07-03', customerName: 'Mike Johnson', amount: 24.99 },
         { id: 'ORD-004', product: 'Kitchen Knife Set', category: 'Home & Kitchen', returnReason: 'Not as Described', status: 'returned', date: '2024-07-04', customerName: 'Sarah Wilson', amount: 149.99 },
@@ -170,7 +170,7 @@ const OrdersReturnsPage = () => {
     ];
 
     const returnReasonsData = [
-        { name: 'Poor Sound Quality', value: 25, color: '#ef4444' },
+        { name: 'Poor  Quality', value: 25, color: '#ef4444' },
         { name: 'Wrong Size', value: 30, color: '#f97316' },
         { name: 'Damaged in Transit', value: 20, color: '#eab308' },
         { name: 'Not as Described', value: 15, color: '#22c55e' },
@@ -178,7 +178,7 @@ const OrdersReturnsPage = () => {
     ];
 
     const categories = ['Electronics', 'Clothing', 'Home & Kitchen', 'Sports'];
-    const returnReasons = ['Poor Sound Quality', 'Wrong Size', 'Damaged in Transit', 'Not as Described', 'Defective Product', 'Poor Quality', 'Wrong Color'];
+    const returnReasons = ['Poor  Quality', 'Wrong Size', 'Damaged in Transit', 'Not as Described', 'Defective Product', 'Poor Quality', 'Wrong Color'];
     const statuses = ['returned', 'processing', 'refunded'];
 
     const filteredOrders = useMemo(() => {
@@ -266,7 +266,7 @@ const OrdersReturnsPage = () => {
                     <div className="bg-white p-6 rounded-lg shadow-sm border flex items-center justify-between">
                         <div>
                             <p className="text-sm text-gray-600">Refunded</p>
-                            <p className="text-2xl font-bold text-gray-900">${filteredOrders.filter(o => o.status === 'refunded').reduce((sum, o) => sum + o.amount, 0).toFixed(2)}</p>
+                            <p className="text-2xl font-bold text-gray-900">Rs.{filteredOrders.filter(o => o.status === 'refunded').reduce((sum, o) => sum + o.amount, 0).toFixed(2)}</p>
                         </div>
                         <XCircle className="w-8 h-8 text-blue-500" />
                     </div>
