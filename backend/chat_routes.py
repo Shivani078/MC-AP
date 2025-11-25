@@ -29,7 +29,7 @@ try:
     groq_api_key = os.getenv("GROQ_API_KEY")
     if not groq_api_key:
         raise KeyError("GROQ_API_KEY not found in .env file")
-    groq_model = ChatGroq(model="llama-3.1-8b-instant")
+    groq_model = ChatGroq(api_key=groq_api_key, model="llama-3.1-8b-instant")
 except Exception as e:
     print(f"Error during Groq configuration in chat: {e}")
     groq_model = None
@@ -75,7 +75,7 @@ async def chat_with_copilot_ai(
     # --- System Prompt and Context Setup ---
     now = datetime.now()
     current_date_str = now.strftime("%A, %B %d, %Y")
-    
+
     # Deserialize products from JSON string
     import json
     try:
@@ -111,6 +111,15 @@ async def chat_with_copilot_ai(
     
     {rich_context}
     """
+
+    # --- Ensure an AI model is available ---
+    # If no model was configured at startup, return a clear 503 response.
+    if not groq_model and not gemini_vision_model:
+        raise HTTPException(
+            status_code=503,
+            detail=("No AI model is configured. Please set `GROQ_API_KEY` or `GOOGLE_API_KEY` "
+                    "in the environment (or start the server with a configured model).")
+        )
 
     # --- Model Invocation ---
     try:
@@ -157,6 +166,9 @@ async def chat_with_copilot_ai(
 
     except Exception as e:
         print(f"An error occurred in chat_with_copilot_ai: {e}")
-        # Consider more specific error handling here
+        # If an HTTPException was intentionally raised, preserve it
+        if isinstance(e, HTTPException):
+            raise e
+        # Otherwise wrap in a 500 to indicate an internal processing error
         raise HTTPException(status_code=500, detail=f"An error occurred while processing the AI request: {str(e)}")
 

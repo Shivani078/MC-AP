@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Store, Edit3, Check, X, Target, Bell, Lock, HelpCircle, ShieldCheck, Calendar, Star, Trophy, TrendingUp, Plus, Trash2
 } from 'lucide-react';
-import { databases } from '../appwrite/client'; // Import Appwrite database
+import { databases, ID } from '../appwrite/client'; // Import Appwrite database
 
 const APPWRITE_DB_ID = import.meta.env.VITE_APPWRITE_DB_ID;
 const APPWRITE_PROFILES_COLLECTION_ID = import.meta.env.VITE_APPWRITE_PROFILES_COLLECTION_ID;
@@ -52,7 +52,7 @@ const ProfileSmartScorePage = ({ user }) => {
         });
     };
 
-    // Store Address handlers
+    // Store Addresses handlers
     const handleAddAddress = () => {
         setProfileData(prev => ({
             ...prev,
@@ -76,10 +76,7 @@ const ProfileSmartScorePage = ({ user }) => {
         });
     };
 
-    const handleEdit = () => {
-        setIsEditing(true);
-    };
-
+    const handleEdit = () => setIsEditing(true);
     const handleCancel = () => {
         setProfileData(originalProfileData);
         setIsEditing(false);
@@ -87,6 +84,7 @@ const ProfileSmartScorePage = ({ user }) => {
 
     const handleSave = async () => {
         try {
+            // Exclude Appwrite metadata before sending update
             const { $id, $collectionId, $databaseId, $createdAt, $updatedAt, $permissions, ...updateData } = profileData;
 
             await databases.updateDocument(
@@ -108,17 +106,9 @@ const ProfileSmartScorePage = ({ user }) => {
         "Bags", "Home Decor", "Electronics", "Beauty", "Sports", "Books"
     ];
 
-    if (isLoading) {
-        return <div className="p-6 text-center">Loading profile...</div>;
-    }
-
-    if (error) {
-        return <div className="p-6 text-center text-red-500">{error}</div>;
-    }
-
-    if (!profileData) {
-        return <div className="p-6 text-center">Your profile data could not be loaded.</div>;
-    }
+    if (isLoading) return <div className="p-6 text-center">Loading profile...</div>;
+    if (error) return <div className="p-6 text-center text-red-500">{error}</div>;
+    if (!profileData) return <div className="p-6 text-center">Your profile data could not be loaded.</div>;
 
     const badges = [
         { id: 2, name: "Festival Ready", description: "Optimized inventory for festival seasons", icon: <Calendar className="w-6 h-6" />, earned: true },
@@ -148,12 +138,8 @@ const ProfileSmartScorePage = ({ user }) => {
                                     Business Profile
                                 </h2>
                                 {!isEditing ? (
-                                    <button
-                                        onClick={handleEdit}
-                                        className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-                                    >
-                                        <Edit3 className="w-4 h-4" />
-                                        Edit
+                                    <button onClick={handleEdit} className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                                        <Edit3 className="w-4 h-4" /> Edit
                                     </button>
                                 ) : (
                                     <div className="flex gap-2">
@@ -168,7 +154,6 @@ const ProfileSmartScorePage = ({ user }) => {
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Business fields */}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Business Name</label>
                                     {isEditing ? (
@@ -177,6 +162,7 @@ const ProfileSmartScorePage = ({ user }) => {
                                         <p className="p-3 bg-gray-50 rounded-lg font-medium">{profileData.businessName}</p>
                                     )}
                                 </div>
+
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Owner Name</label>
                                     {isEditing ? (
@@ -185,6 +171,7 @@ const ProfileSmartScorePage = ({ user }) => {
                                         <p className="p-3 bg-gray-50 rounded-lg font-medium">{profileData.ownerName}</p>
                                     )}
                                 </div>
+
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">PIN Code</label>
                                     {isEditing ? (
@@ -193,6 +180,7 @@ const ProfileSmartScorePage = ({ user }) => {
                                         <p className="p-3 bg-gray-50 rounded-lg font-medium">{profileData.pinCode}</p>
                                     )}
                                 </div>
+
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
                                     {isEditing ? (
@@ -201,18 +189,12 @@ const ProfileSmartScorePage = ({ user }) => {
                                         <p className="p-3 bg-gray-50 rounded-lg font-medium">{profileData.phone || 'N/A'}</p>
                                     )}
                                 </div>
+
                                 <div className="md:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                                     <p className="p-3 bg-gray-100 rounded-lg font-medium text-gray-500 cursor-not-allowed">{profileData.email}</p>
                                 </div>
-                                <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
-                                    {isEditing ? (
-                                        <textarea name="address" value={profileData.address || ''} onChange={handleInputChange} rows={3} className="w-full p-3 border border-gray-300 rounded-lg" />
-                                    ) : (
-                                        <p className="p-3 bg-gray-50 rounded-lg font-medium">{profileData.address || 'N/A'}</p>
-                                    )}
-                                </div>
+
                                 <div className="md:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-2">GST Number</label>
                                     {isEditing ? (
@@ -277,8 +259,8 @@ const ProfileSmartScorePage = ({ user }) => {
                                         key={category}
                                         onClick={() => isEditing && handleCategoryToggle(category)}
                                         className={`px-4 py-2 rounded-full font-medium transition-colors text-sm ${(profileData.categories || []).includes(category)
-                                                ? 'bg-indigo-600 text-white'
-                                                : 'bg-gray-200 text-gray-700'
+                                            ? 'bg-indigo-600 text-white'
+                                            : 'bg-gray-200 text-gray-700'
                                             } ${isEditing ? 'hover:bg-gray-300 cursor-pointer' : 'cursor-default'}`}
                                         disabled={!isEditing}
                                     >

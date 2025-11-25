@@ -9,30 +9,30 @@ from serpapi import GoogleSearch
 from langchain.prompts import PromptTemplate
 from langchain.schema import StrOutputParser
 from langchain_groq import ChatGroq
-from dotenv import load_dotenv
-
-# -------------------------------
-# Load .env
-# -------------------------------
-load_dotenv()  # loads environment variables from .env
 
 router = APIRouter()
 
 # -------------------------------
-# API Keys from environment
+# API Keys
 # -------------------------------
-# Correct environment variable fetching
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-# Note: the project .env uses `SERPAPI_KEY` (not `SERPAPI_API_KEY`).
+from dotenv import load_dotenv
+load_dotenv()
+
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-missing = [name for name, val in (("GROQ_API_KEY", GROQ_API_KEY), ("SERPAPI_KEY", SERPAPI_KEY)) if not val]
-if missing:
-    raise ValueError(f"API keys are not set in environment variables: {', '.join(missing)}")
+if not SERPAPI_KEY:
+    raise KeyError("SERPAPI_KEY not found in .env file")
+if not GROQ_API_KEY:
+    raise KeyError("GROQ_API_KEY not found in .env file")
 
-# Use GROQ_API_KEY consistently
-groq_model = ChatGroq(model="llama-3.1-8b-instant", temperature=0.7, api_key=GROQ_API_KEY)
+os.environ["SERPAPI_API_KEY"] = SERPAPI_KEY
+os.environ["GROQ_API_KEY"] = GROQ_API_KEY
 
+# -------------------------------
+# Initialize Groq model
+# -------------------------------
+groq_model = ChatGroq(api_key=GROQ_API_KEY, model="llama-3.3-70b-versatile", temperature=0.7)
 
 # -------------------------------
 # Enhanced Prompt Template
@@ -108,7 +108,9 @@ def fetch_google_results(city, category):
 # Helper: assign random numeric pct and popularity score
 # -------------------------------
 def assign_random_metrics():
+    # Random percent between 3% and 65% with one decimal
     pct = round(random.uniform(3.0, 65.0), 1)
+    # Map to popularity label and numeric score
     if pct >= 35.0:
         label = "High 🔥"
         score = 85
@@ -129,10 +131,13 @@ def get_trends(request: TrendsRequest):
 
     for city in request.cities:
         try:
+            # Step 1: Fetch search results
             results = fetch_google_results(city, request.category)
-            snippets = "\n".join([f"- {r.get('title')}: {r.get('snippet')}" for r in results])
+            snippets = "\n".join([
+                f"- {r.get('title')}: {r.get('snippet')}" for r in results
+            ])
 
-            # Groq reasoning
+            # Step 2: Send to Groq for deep reasoning
             runnable = prompt | groq_model | StrOutputParser()
             response = runnable.invoke({
                 "city": city,
@@ -140,22 +145,27 @@ def get_trends(request: TrendsRequest):
                 "search_results": snippets,
             })
 
+            # Step 3: Clean and parse JSON output
             cleaned = clean_json_response(response)
             parsed = json.loads(cleaned)
 
+            # Step 4: Ensure numeric fields exist by assigning random numbers when needed
             for trend in parsed:
+                # If model provided a numeric percent string, try to extract it
                 pct = None
                 if "change_pct" in trend:
                     try:
                         pct_val = re.search(r"([-+]?\d+(\.\d+)?)", str(trend.get("change_pct")))
                         if pct_val:
                             pct = round(float(pct_val.group(1)), 1)
-                    except:
+                    except Exception:
                         pct = None
 
+                # If no valid pct from model, assign random
                 if pct is None:
                     pct, label, score = assign_random_metrics()
                 else:
+                    # derive label and score from extracted pct
                     if pct >= 35.0:
                         label = "High 🔥"
                         score = 85
@@ -166,11 +176,14 @@ def get_trends(request: TrendsRequest):
                         label = "Low ❄️"
                         score = 20
 
-                trend["pct_change"] = pct
-                trend["change_pct"] = f"{pct}%"
-                trend["popularity_score"] = score
+                # Attach numeric and human-readable fields
+                trend["pct_change"] = pct                      # numeric for charts
+                trend["change_pct"] = f"{pct}%"               # human-readable string
+                trend["popularity_score"] = score             # numeric popularity score
+                # preserve or overwrite popularity label to keep consistency
                 trend["popularity"] = trend.get("popularity", label)
 
+                # ensure lists exist
                 for key in ("features", "competitors", "local_hotspots", "tips"):
                     if key not in trend or not isinstance(trend[key], list):
                         trend[key] = trend.get(key, []) if isinstance(trend.get(key, list), list) else []
@@ -178,17 +191,24 @@ def get_trends(request: TrendsRequest):
             all_trends.extend(parsed)
 
         except Exception as e:
-            all_trends.append({"city": city, "error": str(e)})
+            all_trends.append({
+                "city": city,
+                "error": str(e)
+            })
 
     return {"trends": all_trends}
-
 # -------------------------------
-# Feature images route
+# New route: Fetch feature images via Groq + SerpAPI
 # -------------------------------
 @router.get("/feature-images")
 def get_feature_images(feature: str, category: str = ""):
+    """
+    Finds real online product images for a fashion/lifestyle feature using SerpAPI Google Images search.
+    The goal is to show trending or best-selling product visuals for that feature + category.
+    """
     try:
-        llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.5, api_key=GROQ_API_KEY)
+        # Step 1: Refine query using Groq
+        llm = ChatGroq(api_key=GROQ_API_KEY, model="llama-3.3-70b-versatile", temperature=0.5)
         refine_prompt = (
             f"Refine this term for real e-commerce search: '{feature}' in context of '{category}'. "
             "Output only a short query likely to find trending or best-selling items on Amazon, Myntra, or Flipkart."
@@ -196,6 +216,7 @@ def get_feature_images(feature: str, category: str = ""):
         refined = llm.invoke(refine_prompt)
         refined_query = refined.content.strip()
 
+        # Step 2: Search on Google Images (with shopping context)
         search_query = f"best selling {refined_query} {category} fashion site:myntra.com OR site:amazon.in OR site:flipkart.com"
         params = {
             "engine": "google_images",
@@ -205,10 +226,12 @@ def get_feature_images(feature: str, category: str = ""):
             "num": 10,
             "api_key": SERPAPI_KEY
         }
+
         search = GoogleSearch(params)
         results = search.get_dict()
         image_results = results.get("images_results", [])
 
+        # Step 3: Extract image URLs and filter broken ones
         image_urls = [img.get("original") or img.get("thumbnail") for img in image_results if img.get("original") or img.get("thumbnail")]
         image_urls = [u for u in image_urls if u and u.startswith("http")]
 
