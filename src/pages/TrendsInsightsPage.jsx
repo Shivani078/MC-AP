@@ -59,7 +59,7 @@ const TrendsInsightsPage = () => {
             // Extract city names from addresses (assuming format: "City, State, PIN")
             const cities = locations.map(addr => addr.split(',')[0].trim());
 
-            const response = await axios.post(""https://mc-ap.onrender.com/api/trends"", {
+            const response = await axios.post("https://mc-ap.onrender.com", {
                 cities: cities,
                 category: selectedCategory,
             });
@@ -85,7 +85,7 @@ const TrendsInsightsPage = () => {
                 ...additionalCities.split(',').map(c => c.trim())
             ];
 
-            const response = await axios.post(""https://mc-ap.onrender.com/api/trends"", {
+            const response = await axios.post("https://mc-ap.onrender.com", {
                 cities: allCities,
                 category: category,
             });
