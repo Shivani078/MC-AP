@@ -154,7 +154,7 @@ const InventoryPlanner = () => {
                     </div>
 
                     {/* Top Products to Stock */}
-                    <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+                    {/* <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
                         <div className="flex items-center gap-2 mb-6">
                             <Target className="w-6 h-6 text-green-600" />
                             <h2 className="text-xl font-semibold text-gray-800">🔮 Top Products to Stock This Week</h2>
@@ -217,7 +217,7 @@ const InventoryPlanner = () => {
                                 </tbody>
                             </table>
                         </div>
-                    </div>
+                    </div> */}
 
                     {/* In Demand Near You */}
                     <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
