@@ -220,7 +220,7 @@ const InventoryPlanner = () => {
                     </div> */}
 
                     {/* In Demand Near You */}
-                    <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+                    {/* <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
                         <div className="flex items-center gap-2 mb-6">
                             <MapPin className="w-6 h-6 text-blue-600" />
                             <h2 className="text-xl font-semibold text-gray-800">📍 In Demand Near You</h2>
@@ -261,7 +261,7 @@ const InventoryPlanner = () => {
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </div> */}
 
                     {/* Avoid These Products */}
                     <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
@@ -295,7 +295,7 @@ const InventoryPlanner = () => {
                 </div>
 
                 {/* AI Recommendations Side Panel */}
-                <div className="w-96 bg-white border-l border-gray-200 p-6 overflow-y-auto">
+                {/* <div className="w-96 bg-white border-l border-gray-200 p-6 overflow-y-auto">
                     <div className="mb-6">
                         <div className="flex items-center gap-2 mb-3">
                             <Bot className="w-6 h-6 text-purple-600" />
@@ -381,7 +381,7 @@ const InventoryPlanner = () => {
                             </div>
                         </div>
                     </div>
-                </div>
+                </div> */}
             </div>
         </div>
     );
