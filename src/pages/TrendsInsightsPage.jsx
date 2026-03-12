@@ -461,17 +461,7 @@ const TrendsInsightsPage = () => {
                                         </div>
                                     </div>
 
-                                    {/* Footer */}
-                                    <div className="bg-gray-50 px-6 py-3 text-xs text-gray-500 flex items-center justify-between border-t border-gray-100">
-                                        <span className="flex items-center gap-1">
-                                            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                                            Updated {new Date().toLocaleDateString()}
-                                        </span>
-                                        <span className="flex items-center gap-1">
-
-                                            <span className="text-blue-400"></span>
-                                        </span>
-                                    </div>
+                                   
                                 </>
                             )}
                         </div>
